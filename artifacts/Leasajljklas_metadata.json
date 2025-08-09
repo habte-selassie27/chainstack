@@ -1,0 +1,45 @@
+{
+	"compiler": {
+		"version": "0.8.30+commit.73712a01"
+	},
+	"language": "Solidity",
+	"output": {
+		"abi": [],
+		"devdoc": {
+			"kind": "dev",
+			"methods": {},
+			"version": 1
+		},
+		"userdoc": {
+			"kind": "user",
+			"methods": {},
+			"version": 1
+		}
+	},
+	"settings": {
+		"compilationTarget": {
+			"Vote.sol": "Leasajljklas"
+		},
+		"evmVersion": "prague",
+		"libraries": {},
+		"metadata": {
+			"bytecodeHash": "ipfs"
+		},
+		"optimizer": {
+			"enabled": false,
+			"runs": 200
+		},
+		"remappings": []
+	},
+	"sources": {
+		"Vote.sol": {
+			"keccak256": "0x8da1a56d035cb7468955abd85417816755bca3e5094c35f6b6b8e10faa7d4be0",
+			"license": "MIT",
+			"urls": [
+				"bzz-raw://6271a1be47341ba792c12f596a5fdb5c3112db2c64100b4d30af6ee96de0a612",
+				"dweb:/ipfs/QmefurpRkpqFRx5Da9sbJe9GxcxX1z4tfG24jDzvMKzfsT"
+			]
+		}
+	},
+	"version": 1
+}

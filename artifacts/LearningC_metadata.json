@@ -1,0 +1,45 @@
+{
+	"compiler": {
+		"version": "0.8.30+commit.73712a01"
+	},
+	"language": "Solidity",
+	"output": {
+		"abi": [],
+		"devdoc": {
+			"kind": "dev",
+			"methods": {},
+			"version": 1
+		},
+		"userdoc": {
+			"kind": "user",
+			"methods": {},
+			"version": 1
+		}
+	},
+	"settings": {
+		"compilationTarget": {
+			"Vote.sol": "LearningC"
+		},
+		"evmVersion": "prague",
+		"libraries": {},
+		"metadata": {
+			"bytecodeHash": "ipfs"
+		},
+		"optimizer": {
+			"enabled": false,
+			"runs": 200
+		},
+		"remappings": []
+	},
+	"sources": {
+		"Vote.sol": {
+			"keccak256": "0x953805052dbd837dc530b23d05565b3ab3cf27c8d2985ca619a66f52c43262e8",
+			"license": "MIT",
+			"urls": [
+				"bzz-raw://2b4036f0f13eccf7549325853dcae3d394600c84b792c21fe663a179bdbb1376",
+				"dweb:/ipfs/QmZkvRwgZhDEVokYwJf1cZJtaWMsFRwLMpbVsJ9LM5SRYr"
+			]
+		}
+	},
+	"version": 1
+}

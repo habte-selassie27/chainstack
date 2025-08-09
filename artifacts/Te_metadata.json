@@ -1,0 +1,45 @@
+{
+	"compiler": {
+		"version": "0.8.20+commit.a1b79de6"
+	},
+	"language": "Solidity",
+	"output": {
+		"abi": [],
+		"devdoc": {
+			"kind": "dev",
+			"methods": {},
+			"version": 1
+		},
+		"userdoc": {
+			"kind": "user",
+			"methods": {},
+			"version": 1
+		}
+	},
+	"settings": {
+		"compilationTarget": {
+			"Tet.sol": "Te"
+		},
+		"evmVersion": "shanghai",
+		"libraries": {},
+		"metadata": {
+			"bytecodeHash": "ipfs"
+		},
+		"optimizer": {
+			"enabled": false,
+			"runs": 200
+		},
+		"remappings": []
+	},
+	"sources": {
+		"Tet.sol": {
+			"keccak256": "0xa6a1eecebf774756108bbb507bab773d416cffd0a3adcc60cbc2b029cad656b7",
+			"license": "MIT",
+			"urls": [
+				"bzz-raw://e9b1319a660267cc37f118b6f5310da8f710ceedfb8f044fe69a511c8ae5f191",
+				"dweb:/ipfs/QmVPKtNB8TeFzgyrxYmv2moPSj2rd8qb6ZNtBeJbnSDb1A"
+			]
+		}
+	},
+	"version": 1
+}
