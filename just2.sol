@@ -1270,27 +1270,39 @@ contract TransactionProposal {
       address to;
       address from;
       uint value;
-      bytes data;;
+      bytes data;
       bool isExecuted;
       uint confirmations;
-      TransactionMetaData transactionmetadata;
+      TransactionMetaData txdata;
       TransactionState txnstate;
     }
-
+    
     struct TransactionMetaData {
-       uint256 blockNumber;
-       uint256 blockTimestamp;
-       uint256 blockBaseFee;
-       uint256 blockgaslimit; 
-       uint256 blockdifficulty;
-       uint256 blockChainid;
-       uint256 blockCoinbase;
+        uint256 blockNumber;
+        uint256 chainId;
+        uint256 blockDiffculty;
+        uint256 blockHash; 
+        uint256 transactionTimeStamp;
+        address transactionSender;
+        uint256 gasLeft;
+        uint256 blockBaseFee;
+        uint256 transactionGasPrice;
+        uint256 currentBlockBlobBaseFee;
+        uint256 blockGaslimit;
+        address blockMinerAddress;
     }
 
+    enum TransactionState {Raw, Pending, Executed, Mined}
+    
     mapping(uint => Transaction) public transactions;
-    Transaction[] public transactionArray;
 
+    Transaction[] public transactionArray;
     Transaction public transaction;
+   
+    mapping(address => uint256) public balances;
+    uint userBalance = balances[msg.sender];
+
+   
 
     // Allows owners to propose a transaction (recipient + value).
     // or allow owners to introduce or create a transaction proposal
@@ -1362,69 +1374,695 @@ contract TransactionProposal {
        };
     }
 
- // for a transaction to be executed it must be mined
+ // for a transaction to be executed it must be mined after confirmation, transaction can be executed.
 
- // After confirmation, transaction can be executed.
-  // so after 
-
-
-  function transactionExecution(uint transactionId) public returns() {
-    enum TransactionState {Raw, Pending, Executed, Mined}
+  function transactionExecution(uint txId) public onlyAdmin 
+   returns(
+      uint256,uint256,uint256,bytes32,uint256,
+      uint256,uint256,uint256,uint256, uint256,
+      TransactionState,bool,address,address
+      ) {
+   
+    // if transaction uses blob or proto dunksharding then we have to calculate 
+    // the transaction blobfee
     
-    struct Transaction {
-      address to;
-      address from;
-      uint value;
-      bytes data;;
-      bool isExecuted;
-      uint confirmations;
-      TransactionMetaData transactionmetadata;
-      TransactionState txnstate;
+    if (block.basefee > block.gaslimit) {
+
+        balances[msg.sender] =  balances[msg.sender] - 
+        transactions[txId].txGasPrice + transactions[txId].BlockBlobBaseFee;
+        transactions[txId].txnstate = TransactionState.Executed;
+        return "transaction is costy try to use the blob transaction to reduce the gasFee";
+     } else {
+        balances[msg.sender] =  balances[msg.sender] - 
+        transactions[txId].txGasPrice + transactions[txId].blockBaseFee;
+        transactions[txId].txnstate = TransactionState.Executed;
+        return "transaction cost is failry normal use normal tx for smaller gasFee";
     }
 
-    struct TransactionMetaData {
-       uint256 blockNumber;
-       uint256 blockTimestamp;
-       uint256 blockBaseFee;
-       uint256 blockgaslimit; 
-       uint256 blockdifficulty;
-       uint256 blockChainid;
-       uint256 blockCoinbase;
-    }
+      transactions[txId].txdata.blockNumber = block.number;
+      transactions[txId].txdata.chainId = block.chainid;
+      transactions[txId].txdata.blockDiffculty = block.difficulty;
+      transactions[txId].txdata.blockHash = blockhash(blockNumber); 
+      transactions[txId].txdata.transactionTimeStamp = block.timestamp;
+      transactions[txId].txdata.gasLeft = gasleft();
+      transactions[txId].txdata.blockBaseFee = block.basefee;
+      transactions[txId].txdata.transactionGasPrice = tx.gas;
+      transactions[txId].txdata.currentBlockBlobBaseFee = block.blobbasefee
+      transactions[txId].txdata.blockGaslimit = block.gaslimit;
+      transactions[txId].txdata.isExecuted = true;
+      transactions[txId].txnstate = TransactionState.Executed;
+      transactions[txId].txdata.blockMinerAddress = block.coinbase;  
+      transactions[txId].txdata.transactionSender = tx.origin(msg.sender);
 
-    mapping(uint => Transaction) public transactions;
-    Transaction[] public transactionArray;
-    Transaction public transaction;
-
-     mapping(address => uint) public approvalsCount;
-     mapping(address => bool) public isApproved;
-     
-     uint countApprovals = 0;
-     address[] public approversList;
-     address[] public approvedOwnersList;
+    return (
+       transactions[txId].txdata.blockNumber, transactions[txId].txdata.chainId, transactions[txId].txdata.blockDiffculty,
+       transactions[txId].txdata.blockHash, transactions[txId].txdata.transactionTimeStamp, transactions[txId].txdata.gasLeft ,
+       transactions[txId].txdata.blockBaseFee, transactions[txId].txdata.transactionGasPrice, transactions[txId].txdata.currentBlockBlobBaseFee,
+       transactions[txId].txdata.blockGaslimit, transactions[txId].txdata.isExecuted, transactions[txId].txnstate ,
+       transactions[txId].txdata.blockMinerAddress, transactions[txId].txdata.transactionSender 
+    );
   }
-
 }
 
 contract ConflictResolver is OwnerSet, TransactionProposal {
  //  If two conflicting proposals exist (same recipient + amount
- //  but different purpose),log an event and allow community 
- //  (external address) to resolve the decision. 
+  struct Transaction {
+      uint value;
+      bytes data;  
+      address sender;
+      address recipient;
+      bool isExecuted;
+      uint confirmations;
+      TransactionMetaData txdata;
+      TransactionState txnstate;
+    }
+
+    event conflictingTransactions(address indexed recipient1, address indexed recipient2, uint256 amount1, uint amount2);
+
+   
+//   If two conflicting proposals exist (same recipient + amount but different purpose),
+//    log an event and allow community (external address) to resolve the decision.
+
+ function checkIfConflictingProposalsExist(uint transactionIdOne, uint transactionIdTwo) public returns(string memory) {
+    
+    address public communityUser;
+    address public externalAddresses;
+    mapping (address => mapping(uint => Transaction[])) public userTransaction;
+
+    if (transactions[transactionIdOne].recipient == transactions[transactionIdTwo].recipient 
+       &&  transactions[transactionIdOne].value == transactions[transactionIdTwo].value ) {
+        emit conflictingTransactions(transactions[transactionIdOne].recipient, transactions[transactionIdTwo].recipient, 
+        transactions[transactionIdOne].value, transactions[transactionIdTwo].value);
+        communityResolving(address communityUser, uint transactionIdOne, uint transactionIdTwo, uint amount1, uint amount2, address recipient1, address recipient2)
+        return "conflicting transactions occured allow the community (external address) to resolve the decision"
+    } else {
+        return "transaction does not have conflicting problems let's go";
+    }
+ } 
+
+ // to resolve the problem we have to address or change either the recipient or the amount of transaction proposed by users
+   function communityResolving(address communityUser, uint transactionIdOne, uint transactionIdTwo,
+       uint amount1, uint amount2, address recipient1, address recipient2) public returns(bool) {
+       require(transactions[transactionIdOne].recipient == transactions[transactionIdTwo].recipient , "diffenrent transaction recipient nothin to resolve");
+       require(transactions[transactionIdOne].value == transactions[transactionIdTwo].value, "diffenrent transaction amount nothin to resolve");
+       require(amount1 != amount2, "transaction value for confliciting proposals must be different");
+       require( recipient1 != address(0) && recipient2 != address(0), "invalid address");
+       require(recipient1 != recipient2, message);
+        userTransaction[communityUser][transactionIdOne].value = amount1;
+        userTransaction[communityUser][transactionIdOne].value = amount2;
+        userTransaction[communityUser][transactionIdTwo].recipient = recipient1;
+        userTransaction[communityUser][transactionIdTwo].recipient = recipient2;
+      
+   }
 }
 
 
+⚙️ HARD CODE EXAMPLE 1: Multi-Layer Abstract Contract with Partial Logic
+
+abstract contract Logger {
+    event Log(address indexed sender, string message);
+
+    function log(string memory message) internal  {
+        emit Log(msg.sender, message);
+    }
+
+    function run() public virtual returns(string memory);
+     
+}
+
+abstract contract Processor is Logger {
+    function process(uint a, uint b) public virtual returns(uint);
+}
+
+abstract contract Calculator is Processor {
+    function process(uint a, uint b) public override returns(uint) {
+       log("Processing in Calculator");
+       return a + b;   
+    }  
+
+    function run() public override returns(string memory){
+        log("Runing Calculation");
+        return "Calculation done"
+    }
+}
+
+⚙️ HARD CODE EXAMPLE 2: Abstract Factory Pattern
+
+abstract contract Token {
+    function transfer(address to, uint amount) public virtual returns(bool);
+    function mint(address to, uint amount) public virtual;
+}
+
+contract ERC20Token is Token {
+    mapping(address => uint) public balances;
+
+    function transfer(address to, uint amount) public override returns(bool) {
+        require(balances[msg.sender] >= amount, "Insufficent balance");
+        balances[msg.sender] -= amount;
+        balances[to] += amount;
+        return true;
+    }
+
+    function mint(address to, uint amount) public override {
+        balances[to] += amount;
+    }
+}
+
+abstract contract TokenFactory {
+    function createToken(params) public virtual returns(Token);
+}
+
+contract ERC20Factory is TokenFactory {
+    function createToken() public override returns(Token) {
+        return new ERC20Token();
+    }
+}
+
+⚙️ HARD CODE EXAMPLE 3: Abstract Auth System + Inheritance Chain
+abstract contract BaseAuth {
+    mapping(address => bool) internal admins;
+
+    modifier onlyAdmin() {
+        require(admins[msg.sender], "Not admin");
+        _;
+    }
+
+    constructor() {
+        admins[msg.sender] = true;
+    }
+
+    function addAdmin(address user) public virtual;
+    function removeAdmin(address user) public virtual;
+}
+
+abstract contract RBAC is BaseAuth {
+    mapping(address => string) internal roles;
+
+    function assignRole(address user, string memory role) public virtual;
+    function getRole(address user) public view virtual returns(string memory);
+}
+
+contract FullAccessControl is RBAC {
+    function addAdmin(address user) public override onlyAdmin {
+        admins[user] = true;
+    }
+
+    function removeAdmin(address user) public override onlyAdmin {
+        admins[user] = false;
+    }
+
+    function assignRole(address user, string memory role) public override onlyAdmin {
+       // admins[user] = true;
+        roles[user] = role;
+    }
+    function getRole(address user) public override onlyAdmin {
+       return roles[user];
+    }
+
+}
+
+💼 Problem 1: Cross-Chain Bridge Protocol
+Context: You’re building a base protocol for a cross-chain token bridge.
+
+
+abstract contract BridgeAdapter {
+    address public admin;
+    address public owner;
+    address public user;
+
+    address[] public admins;
+    address[] public owner;
+    address[] public users;
+
+    uint public totalSupply;
+
+    constructor(uint totalTokenSupply) {
+        totalSupply = totalTokenSupply;
+        owner = msg.sender;
+    }
+
+    modifier onlyAdmin() {
+      require(msg.sender == admin, "Not admin");
+       _;
+    }
+
+     modifier onlyOwner() {   
+       require(msg.sender == owner, "Not admin");
+       _;
+    }
+
+     modifier onlyUser() {
+     require(msg.sender == user, "Not admin");
+     _;
+    }
+
+    // tokens will have to live on one of the created Chains
+    function createChain(uint _chainId, string memory _name, address _chainAddress) 
+      public onlyAdmin returns(ChainData memory) {
+        require(_chainId > 0, "Invalid chainid");
+        require(_chainAddress != address(0), "invalid chain address");
+        ChainData storage newChain = new ChainData({
+           name : _name;
+           chainId : _chainId;
+           chainAddress : _chainAddress;
+        });
+        return (newChain);
+    }
+       
+         
+   struct ChainData {
+      string name;
+      uint chainId;
+      address chainAddress;
+   }
+
+   mapping(uint => ChainData) public chainInformation;
+
+   struct Token {
+      string name;
+     //uint amount;
+      string description;
+      uint maxSupply;
+      uint circulatingAmount;
+      uint totalSupply;
+      // single token can be handed by many users
+      address[] owners;// reference using mapping tokenIds
+      // single token can be handed by signle user
+      address owner;// reference using mapping tokenIds
+      uint lockTime;
+      bool hasTokenLocked;
+      uint amountOfLockedTokens;
+      bool hasTokenUnlocked;
+      uint amountToTransfer;
+      bool isTransferAllowed;
+      bool isTradingAllowed;
+      uint amountToTrade;
+
+      uint chainId; // referncing chaindata using mapping reference
+
+    }
+
+// a user can have multiple tokens at once 
+// a user can have single token at once 
+// 
+// single token can be handed by many users
+// single token can be handed by signle user
+
+
+   struct User {
+     string name;
+     uint userId;
+     address user;
+     uint balance;
+     uint tokenBalance;
+     bool isUserHaveToken;
+     // a user can have multiple tokens at once 
+     uint[] tokens; // reference using mapping tokenIds
+     // a user can have single token at once 
+     uint token; // reference using mapping tokenId
+     // a user can have multiple tokens at once 
+     address[] tokens; // reference using mapping addresses
+     // a user can have single token at once 
+     address token; // reference using mapping address
+     Token token; 
+     // using reference 
+     address token;
+     // for user check purpose
+     mapping(uint => bool) hasUserTokenLocked;
+     mapping(uint => uint) amountToTransfer;
+     mapping(uint => bool) isTransferAllowed;
+     mapping(uint => bool) isTradingAllowed;
+     mapping(uint => uint) amountToTrade;
+
+    }
+     
+    mapping(address => User) public users;
+    mapping(address => Token) public userToken;
+    mapping(uint => Token) public usersToken;
+
+    Token[] public tokensList;
+
+    mapping(address => mapping(Token => bool)) public isUserHaveToken;
+    mapping(address => uint) public userBalances;
+    mapping(address => mapping(Token => uint)) public userTokenBalance;
+
+
+   function createTokens(string memory _name, uint _amount, string memory _description,
+    uint _maxTokenAmount, uint _circulatingTokenAmount, 
+    uint _totalTokenSupply, address _minter) 
+    public virtual returns(Token) {
+     require(totalSupply != 0, "token supply must be different than zero");
+      Token storage newToken = new Token({
+        name : _name,
+        amount : _amount,
+        description : _description,
+        maxSupply : _maxTokenAmount,
+        circulatingAmount : _circulatingAmount,
+        totalSupply : _totalTokenSupply,
+        owner : msg.sender,
+        owners : [..., msg.sender],
+    })
+     tokensList.push(newToken); 
+     return newToken;
+
+    }
+
+    function mintToken(uint tokenId, uint amount) public returns (uint) {
+        require(balances[msg.sender] >= amount, "user balance must be greater or equal to the amount of token he want to purchase");
+        require(amount > 0, "minimum purchase amount is 1");
+        require(msg.sender != address(0), "purchased tokens can not go to zero address");
+
+         users[msg.sender].balance -= amount;
+         // users[msg.sender].isUserHaveToken = true;
+         usersToken[tokenId].owners[msg.sender].balance -= amount
+         usersToken[tokenId].owners[msg.sender].tokenBalance += amount;
+         usersToken[tokenId].owners[msg.sender].isUserHaveToken = true;
+         // when a user mints or purchases a token then we have to increase the circulating supply by that amount
+         users[msg.sender].tokens[tokenId].circulatingAmount += amount;
+        // when a user purchase some amount of token we have to increase the total supply by that amount?
+        return (usersToken[tokenId].owners[msg.sender].tokenBalance);
+
+    }
+
+    function burnTokens(uint tokenId, uint amountToBurn) public returns() {
+        // maxSupply is upper limit tokens
+        uint maxSupply = usersToken[tokenId].maxSupply;
+        //  totalSupply is maxSupply - burned tokens
+        uint totalSupply  =usersToken[tokenId].totalSupply;
+        // circulating supply is tokens available on market which is piles up when users purchase or mint token 
+        uint circulatingSupply = usersToken[tokenId].circulatingSupply;
+        // specfic token holder
+        address owner = usersToken[tokenId].owner;
+        // group of token holders
+        address[] owners = usersToken[tokenId].owners
+
+        require(maxSupply > 0 && totalSupply > 0 && circulatingSupply > 0 , "maximu , total and circulating supplies must be greater than zero");
+        require(maxSupply >= totalSupply && maxSupply >= circulatingSupply, "max supply must be greater than or equal to circulating and total supply");
+        require(totalSupply >= circulatingSupply, "circulating supply must be less than or equal to total token supply");
+        // require(circulatingSupply > 0 && totalSupply >= circulatingSupply, "circulating supply must be less than or equal to total token supply"usersToken[tokenId].maxTokenAmount != 0, "token supply must be different than zero");
+        require(owner != address(0) && owners != address(0), "zero address can not hold any token");
+        require(usersToken[tokenId].totalSupply != 0, "token supply must be different than zero");
+
+        //    uint totalTokenHoldersUser = usersToken[tokenId].owners.length;
+        //    lets say totalSupply = 1,000 if there are 50 diffrent users with variyng tokens then we have to reduce each user supply based on thier holding
+        //    lets say a = 100 token then percentage of a is 
+        //    toal = 1000 = 100 * 100 = 1000 a then a =( total-percentage * eachusershare ) / totalsupply
+        //    a = 100 then a = 10% ? userPercentage = totalPercentage * eachusershare / totalsupply 
+        //    then         userpercentage * totalsupply / totalPercentage  = 10% * 900 = 9000% / 100% = 90 eachusershare
+        //    lets say if we burn 100 tokens then total token supply become 900
+        //    then how must the previous 100 token holder must have ? 
+        uint totalPercentage = 100%;
+        // total token supply of a specfic token id
+        uint totalTokenSupply = usersToken[tokenId].totalSupply;
+        uint userTokenBalanceBeforeBurn = usersToken[tokenId].owners[msg.sender].tokenBalance
+        uint percentageOfEachUserShareFromTotalToken = ( tokenBalanceOfEachUserPerTokenID  *  totalPercentage ) / totalTokenSupply;
+        uint tokenSupplyAfterBurn = totalTokenSupply - amountToBurn;
+        uint userTokenBalanceAfterBurn = ( percentageOfEachUserShareFromTotalToken * tokenSupplyAfterBurn ) / totalPercentage;
+        uint amountOfTokenToBeReducedPerUser = userTokenBalancePerTokenID - userTokenBalanceAfterBurn;
+        uint newUserTokenBalance = userTokenBalanceAfterBurn;
+        // how to calculate each users token a certain amount of token is burned for each token holder
+        // to correctly update the user balance we have to divide the amount of token burned per each token holder // now we have to calculate the total token supply 
+         // when we burn some amount of token from the user token balance we have to give it some plain currency correspondig to the amount we burned from him balance
+         usersToken[tokenId].owners[msg.sender].tokenBalance -= amountOfTokenToBeReducedPerUser;
+         usersToken[tokenId].owners[msg.sender].balance += amountOfTokenToBeReducedPerUser;
+         usersToken[tokenId].owners[msg.sender].isUserHaveToken = true;
+         // when a user burns a token then we have to decrease the total supply by the amount of token burnt
+         usersToken[tokenId].totalSupply = maxSupply - amountToBurn;
+         usersToken[tokenId].circulatingSupply = circulatingSupply;
+        
+    }
+
+    function deleteTokens(uint tokenId, address tokenHolder) public returns() {
+       
+        uint maxSupply = usersToken[tokenId].maxSupply;
+        uint totalSupply  =usersToken[tokenId].totalSupply;
+        uint circulatingSupply = usersToken[tokenId].circulatingSupply;
+
+        require(usersToken[tokenId].totalSupply != 0, "token supply must be different than zero");
+        require(maxSupply > 0 && totalSupply > 0 && circulatingSupply > 0 , "maximu , total and circulating supplies must be greater than zero");
+        require(maxSupply >= totalSupply && maxSupply >= circulatingSupply, "max supply must be greater than or equal to circulating and total supply");
+        require(totalSupply >= circulatingSupply, "circulating supply must be less than or equal to total token supply");
+        require(circulatingSupply > 0 && totalSupply >= circulatingSupply, "circulating supply must be less than or equal to total token supply"usersToken[tokenId].maxTokenAmount != 0, "token supply must be different than zero");
+        require(usersToken[tokenId].owner != address(0), "zero address can not hold any token");
+        require(usersToken[tokenId].owners != 0, "address must be valid address to hold tokens");
+
+        uint totalPercentage = 100%;
+        uint userTokenBalanceBeforeBurn = usersToken[tokenId].owners[msg.sender].tokenBalance
+        uint percentageOfEachUserShareFromTotalToken = ( tokenBalanceOfEachUserPerTokenID  *  totalPercentage ) / totalSupply;
+        uint tokenSupplyAfterBurn = totalSupply - amountToBurn;
+        uint userTokenBalanceAfterBurn = ( percentageOfEachUserShareFromTotalToken * tokenSupplyAfterBurn ) / totalPercentage;
+        uint amountOfTokenToBeReducedPerUser = userTokenBalancePerTokenID - userTokenBalanceAfterBurn;
+        uint newUserTokenBalance = userTokenBalanceAfterBurn;
+        // how to calculate each users token a certain amount o
+ 
+        mapping(address => User) public users;
+        mapping(address => Token) public userToken;
+        mapping(uint => Token) public usersToken;
+        Token[] public tokensList;
+        mapping(address => mapping(Token => bool)) public isUserHaveToken;
+        mapping(address => mapping(Token => uint)) public userTokenBalance;
+        mapping(address => uint) public userBalances;
+
+
+        usersToken[tokenId].name = "";
+        usersToken[tokenId].amount = 0;
+        usersToken[tokenId].description = "";
+        usersToken[tokenId].maxSupply = 0;
+        usersToken[tokenId].circulatingSupply = 0;
+        usersToken[tokenId].totalSupply = 0;
+        usersToken[tokenId].owners[tokenHolder] = address(0);
+        isUserHaveToken[msg.sender][users[tokenId]] = false;
+        users[tokenHolder].tokens[tokenId] = 0;
+        users[tokenHolder].isUserHasToken = false;
+        usersToken[tokenId].owners[tokenHolder].tokenBalance = 0;
+        usersToken[tokenId].owners[tokenHolder].isUserHaveToken = false;
+
+        // but if one of the tokens from the list of tokens is removed we have to give each user 
+        // equivalent amount of token they held before to their balance
+   
+        users[tokenHolder].balance = users[tokenHolder].balance + maxSupply;
+        usersToken[tokenId].owners[msg.sender].balance += amountOfTokenToBeReducedPerUser;
+         tokensList.pop()        
+    }
+
+    // so we need timestamp
+    // prohibit trade or token transfer
+    // token supply is the same
+    // bool variable to check token lock
+    // get time span of lock
+    // token locking means restricting the circulation and transfer or trade of a token for a specfic amount of time
+    function lockTokens(uint tokenId, address tokenAddress) public virtual;
+    
+    function releaseTokens(uint tokenId, address tokenAddress) public virtual; 
+    function getChainName(uint chainId) public virtual returns(string memory);
+     
+}
+
+contract EtheruemBridge is BridgeAdapter {
+    // so we need timestamp
+    // prohibit trade or token transfer
+    // token supply is the same
+    // bool variable to check token lock
+    // get time span of lock
+     // token locking means restricting the circulation and transfer or trade of a token for a specfic amount of time
+    function lockTokens(uint tokenId, address tokenAddress, uint lockTime) public virtual override returns (bool,uint) {
+        require(lockTime > block.timestamp, "Lock time must be in the future");
+        require(tokenAddress != address(0), "Invalid token address");
+        require(tokenId > 0 && tokenId <= tokensList.length , "invalid token ID : not in list or out of range");
+        require(!usersToken[tokenId].hasTokenLocked, "Token is already locked");
+        require(usersToken[tokenId].isTradingAllowed, "Token trading locked: already non-tradable");
+        require(usersToken[tokenId].hasTokenUnlocked, "Token is already locked");
+        require(usersToken[tokenId].isTransferAllowed, "Token transfer locked: already non-transferable");
+        require(usersToken[tokenId].amountToTrade != 0, "Trade amount is zero : token has already locked");
+        require(usersToken[tokenId].amountToTransfer != 0, "Transfer amount is zero : token has already locked");
+         // error TokenLocked(uint256 tokenId);
+         // if (!usersToken[tokenId].isTransferAllowed){
+         //  revert TokenLocked(tokenId); // }
+         //  users[tokenAddress].tokens[tokenId].hasTokenLocked = true;
+         //  users[tokenAddress].tokens[tokenId].lockTime = block.timestamp + lockTime;
+         //  users[tokenAddress].tokens[tokenId].amountOfTokenLocked = circulatingSupply
+         usersToken[tokenId].hasTokenLocked = true;
+         usersToken[tokenId].amountOfLockedTokens = circulatingSupply;
+         usersToken[tokenId].lockTime = block.timestamp + lockTime;
+         // we have to perform check of every user for a specfic token lock but we have to iteratively do the same for every user 
+         // but that is costy so we have to use either in Token Struct or either we have to loss so much on gas fee 
+         delete usersToken[tokenId].amountToTrade;
+         delete usersToken[tokenId].amountToTransfer;
+         //  usersToken[tokenId].amountToTrade = 0;
+         //  usersToken[tokenId].amountToTransfer = 0;
+         usersToken[tokenId].isTradingAllowed = false;
+         usersToken[tokenId].isTransferAllowed = false;
+         usersToken[tokenId].hasTokenUnlocked = false;
+
+         return (usersToken[tokenId].hasTokenLocked, usersToken[tokenId].lockTime);
+         
+    }
+ 
+    
+     function releaseTokens(uint tokenId, address tokenAddress) public virtual override returns(bool,uint) {
+            require(lockTime < block.timestamp && lockTime - block.timestamp < 0, "Lock time must have passed");
+            require(tokenAddress != address(0), "Invalid token address");
+            require(tokenId > 0 && tokenId <= tokensList.length , "invalid token ID : not in list or out of range");
+            require(usersToken[tokenId].hasTokenLocked, "Token is not locked");
+            require(!usersToken[tokenId].isTradingAllowed, "Token trading is not locked: already tradable");
+            require(!usersToken[tokenId].hasTokenUnlocked, "Token is not locked");
+            require(usersToken[tokenId].isTransferAllowed, "Token transfer is not locked: already transferable");
+            require(usersToken[tokenId].amountToTrade == 0, "Trade amount is non zero : token has not locked");
+            require(usersToken[tokenId].amountToTransfer == 0, "Transfer amount is non zero : token has not locked");
+            // error TokenLocked(uint256 tokenId);
+            // if (!usersToken[tokenId].isTransferAllowed){
+            //  revert TokenLocked(tokenId); // }
+            //  users[tokenAddress].tokens[tokenId].hasTokenLocked = true;
+            //  users[tokenAddress].tokens[tokenId].lockTime = block.timestamp + lockTime;
+            //  users[tokenAddress].tokens[tokenId].amountOfTokenLocked = circulatingSupply
+            //if lock time is 5 pm and current is 6 pm then if we substract then negative means already passed
+            usersToken[tokenId].hasTokenLocked = false;
+            usersToken[tokenId].amountOfLockedTokens = 0;
+            delete usersToken[tokenId].amountOfLockedTokens;
+            // we have to make the lockTime to past or zero 
+            delete usersToken[tokenId].lockTime;
+            // delete usersToken[tokenId].lockTime = block.timestamp + lockTime;
+            // we have to perform check of every user for a specfic token lock but we have to iteratively do the same for every user 
+            // but that is costy so we have to use either in Token Struct or either we have to loss so much on gas fee 
+            usersToken[tokenId].amountToTrade = circulatingSupply;
+            usersToken[tokenId].amountToTransfer = circulatingSupply;
+            usersToken[tokenId].isTradingAllowed = true;
+            usersToken[tokenId].isTransferAllowed = true;
+            usersToken[tokenId].hasTokenUnlocked = true;
+            return (usersToken[tokenId].hasTokenUnlocked, usersToken[tokenId].lockTime);
+           
+        }    
+    }
+   struct ChainData {
+      string name;
+      uint chainId;
+      address chainAddress;
+   }
+
+   mapping(uint => ChainData) public chainInformation;
+
+    function getChainName(uint _chainid) public virtual override  returns(string memory, uint, address) {
+        string memory chainName = chainInformation[_chainid].name;
+        uint chainId = chainInformation[_chainid].chainId;
+        address chainAddress = chainInformation[_chainid].chainAddress;
+        return(chainName, chainId, chainAddress);
+    }
+
+    function getChainInfoPerToken(uint tokenid, uint _chainid) public virtual override 
+       returns(string memory, uint, address) {
+        string memory chainName = chainInformation[_chainid].name;
+        uint chainId = chainInformation[_chainid].chainId;
+        address chainAddress = chainInformation[_chainid].chainAddress;
+        return(chainName, chainId, chainAddress);
+    }
 
 
 
+   struct Token {
+      uint maxSupply;
+      uint circulatingAmount;
+      uint totalSupply;
+      address[] owners;// reference using mapping tokenIds
+      uint lockTime;
+      bool hasTokenLocked;
+      uint amountOfLockedTokens;
+      bool hasTokenUnlocked;
+      uint amountToTransfer;
+      bool isTransferAllowed;
+      bool isTradingAllowed;
+      uint amountToTrade;
+      uint chainId; // referncing chaindata using mapping reference
+    }  
+}
+
+contract BSCBridge is BridgeAdapter {
+    
+}
+
+contract BridgeController is {
+    
+}
+
+💼 Problem 2: Plugin-Based NFT Metadata Renderer
+
+abstract contract MetadataRenderer {
+    address public owner;
+
+    struct TransactionHistory {
+        
+    }
 
 
+    struct NFT {
+        string name;
+        // a unique number for that NFT within its Smart Contract
+        uint tokenId;
+        // where the Nft is issued from
+        address nftSmartContractAddress;
+        // the public key of whoever owns owns the nft at the moment
+        address ownerWalletAddress;
+        // the original minter of the NFT
+        address creatorWalletAddress;
+        // List of sales, transfers, miniting events
+        uint[] transactionHistory;
+        // Usually a URL or IPFS hash pointing to a more detailed off-chain data
+        string linkToMetadata
 
+    }
+    struct Attribute {
+        string traitType;
+        string value;
+        string displayType;
+    }
 
+    struct CreatorInfo {
+        string name;
+        string website;
+        string marketPlacePage;
+    }
 
+    struct FileData {
+        string uri;
+        string mimeType;
+    }
 
+    struct NFTMETADATA {
+        string name;
+        string description;
+        string image;
+        string animationUrl;
+        string externalUrl;
+        string backgroundColor;
+        Attribute[] attributes;
+        // artist name, website, social links 
+        CreatorInfo creator;
+        // official project site or marketplace page
+        FileData[] files;
+        // can also include 3d models, audio or interactive HTML media files
 
+    }
+    function render(params) external view returns(string memory);
 
+     
+}
 
+contract SimpleRenderer is MetadataRenderer {
+    
+}
+
+contract DynamicRenderer is MetadataRenderer {
+    
+}
+
+contract NFT {
+    Store MetadataRenderer reference.
+
+Allow owner to set/change the renderer.
+
+Return tokenURI(uint) using current plugin.
+
+Challenge: Dynamically call abstract methods across contracts using interfaces + access control.
+}
 
 
 
