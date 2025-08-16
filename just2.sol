@@ -1988,11 +1988,35 @@ contract BridgeController is {
 abstract contract MetadataRenderer {
     address public owner;
 
-    struct TransactionHistory {
-        
+    struct Transfer {
+        address to;
+        uint amount;
+        address from;
+        uint timestamp;
+        uint blocknumber;
     }
 
+    struct Sales {
+        address seller;
+        address buyer;
+        string itemName;
+        uint sellingPrice;
+        uint timestamp;
+        uint blocknumber;
+    }
 
+    struct Mint {
+        address to;
+        uint amount;
+    }
+
+    struct TransactionsHistory {
+        Mint[] mints;
+        Sales[] sales;
+        Transfer[] transfers;
+    }
+
+     // action to on NFT's mint, burn, transfer, sales, purchases
     struct NFT {
         string name;
         // a unique number for that NFT within its Smart Contract
@@ -2004,15 +2028,48 @@ abstract contract MetadataRenderer {
         // the original minter of the NFT
         address creatorWalletAddress;
         // List of sales, transfers, miniting events
-        uint[] transactionHistory;
+        TransactionsHistory[] transactionHistory;
         // Usually a URL or IPFS hash pointing to a more detailed off-chain data
-        string linkToMetadata
-
+        string linkToMetadata; // mapping reference to NFTMetaData
+        bytes32 linkToMetadata; // mapping reference to NFTMetaData
     }
+
+
+    NFT storage newNft = new NFT({
+        string name;
+        // a unique number for that NFT within its Smart Contract
+        uint tokenId;
+        // where the Nft is issued from
+        address nftSmartContractAddress;
+        // the public key of whoever owns owns the nft at the moment
+        address ownerWalletAddress;
+        // the original minter of the NFT
+        address creatorWalletAddress;
+        // List of sales, transfers, miniting events
+        TransactionsHistory[] transactionHistory;
+        // Usually a URL or IPFS hash pointing to a more detailed off-chain data
+        string linkToMetadata; // mapping reference to NFTMetaData
+        bytes32 linkToMetadata; // mapping reference to NFTMetaData
+    })
+
+  
+
     struct Attribute {
         string traitType;
         string value;
         string displayType;
+    }
+
+    // Internal helper to create an Attribute struct in memory
+    function createAttribute(string memory _traitType,string memory _value,string memory _displayType) internal pure returns(Attribute memory) {
+        return Attribute(_traitType, _value, _displayType);
+    }
+
+    // Internal helper to create creator information struct in memory
+    function createCreatorInfo(string memory _name,
+        string memory _website,
+        string memory _marketPlacePage)internal pure returns(CreatorInfo memory) {
+        return CreatorInfo(_name, _website, _marketPlacePage);
     }
 
     struct CreatorInfo {
@@ -2021,12 +2078,18 @@ abstract contract MetadataRenderer {
         string marketPlacePage;
     }
 
+    // internal helper to create Filedata struct in memory
+    function createFileData(string memory _uri, string memory _mimeType) internal pure returns(FileData memory) {
+        return FileData(_uri, _mimeType);
+    }
+
+    
     struct FileData {
         string uri;
         string mimeType;
     }
 
-    struct NFTMETADATA {
+    struct NFTMetaData {
         string name;
         string description;
         string image;
@@ -2039,8 +2102,164 @@ abstract contract MetadataRenderer {
         // official project site or marketplace page
         FileData[] files;
         // can also include 3d models, audio or interactive HTML media files
-
     }
+  // storage mapping from tokenId to nft metadata
+    mapping(string => NFTMetaData) public nftMetaData;
+
+    uint private _nextTokenId = 1;
+
+    function createNFTMetaData(uint _tokenId string memory _name, string memory _description,
+        string memory _image, string memory _animationUrl,
+        string memory _externalUrl, string memory _backgroundColor
+        Attribute[] memory _attributes, CreatorInfo memory _creator,FileData[] memory _files
+        ) public returns(NFTMetaData memory) {
+
+        uint tokenId = _nextTokenId ++;
+        
+        NFTMetaData storage metadata = nftMetaData[_tokenId];
+        metadata.name = _name;
+        metadata.description = _description;
+        metadata.image = _image;
+        metadata.animationUrl = _animationUrl;
+        metadata.externalUrl = _externalUrl;
+        metadata.backgroundColor = _backgroundColor;
+        metadata.creator = _creator;
+        metadata.attributes = _attributes;
+        metadata.files = _files;
+        
+        // clear if existing atrributes
+        delete metadata.attributes
+
+        // clear existing creator
+        delete metadata.creator;
+
+        // clear existing files
+        delete metadata.files;
+
+        // copy attributes from memory to storage
+        for (uint i = 0; _attributes.length; i++) 
+        {
+            metadata.attributes.push(_attributes[i]);
+        }
+
+        // copy attributes from memory to storage
+        for (uint i = 0; _files.length; i++) 
+        {
+            metadata.attributes.push(_files[i]);
+        };
+
+          return (metadata);
+    }
+
+
+
+
+
+
+    mapping(uint256 => Mint[]) private mintList;
+    mapping(uint256 => Sales[]) private salesList;
+    mapping(uint256 => Transfer[]) private transferList;
+
+
+    mapping(string => NFTMetaData[]) public nftMetaDatas;
+    mapping(bytes32 => NFTMetaData) public nftMetaData;
+    mapping(bytes32 => NFTMetaData[]) public nftMetaDatas;
+
+
+
+    function transfer(uint tokenId, address _from, uint _amount, address _to ) 
+      internal returns(Transfer[] memory) {
+        Transfer[] storage newTransfer = transferList[tokenId].push(
+          Transfer(
+             from : _from,
+             to : _to,
+             amount : _amount,
+             timestamp : block.timestamp,
+             blocknumber : block.number
+         ))
+
+         return newTransfer;
+
+        transferList[tokenId].push(Transfer(_from, _to, _amount, block.timestamp, block.number))
+        Transfer memory newTransfer = new Transfer({
+
+        })
+    } 
+     function getTransfer(uint tokenId) public view returns(Transfer[] memory) {
+        // first load storage array into memory
+        Transfer[] memory transferHistory = new Transfer[] (transferList[tokenId].length);
+        for (uint i = 0; i < transferList[tokenId].length; i++) 
+        {
+            transferHistory[i] = transferList[tokenId][i];
+        } 
+          return transferHistory;
+     }
+
+
+    function sale(uint tokenId, uint sellingPrice, string _itemName, address _seller, address _buyer ) 
+      internal returns(Sales[] memory) {
+        Sales[] storage newSale = salesList[tokenId].push(
+          Sales(
+             seller : _seller,
+             buyer : _buyer,
+             sellingPrice : _sellingPrice,
+             itemName : _itemName
+             timestamp : block.timestamp,
+             blocknumber : block.number
+         ))
+
+         return newSale;
+
+        transferList[tokenId].push(Transfer(_from, _to, _amount, block.timestamp, block.number))
+        Transfer memory newTransfer = new Transfer({
+
+        })
+    } 
+     function getSale(uint tokenId) public view returns(Sales[] memory) {
+        // first load storage array into memory
+        Sales[] memory saleHistory = new Transfer[] (salesList[tokenId].length);
+        for (uint i = 0; i < salesList[tokenId].length; i++) 
+        {
+            saleHistory[i] = salesList[tokenId][i];
+        } 
+          return saleHistory;
+     }
+
+    function sale(uint tokenId, uint sellingPrice, string _itemName, address _seller, address _buyer ) 
+      internal returns(Sales[] memory) {
+        Sales[] storage newSale = salesList[tokenId].push(
+          Sales(
+             seller : _seller,
+             buyer : _buyer,
+             sellingPrice : _sellingPrice,
+             itemName : _itemName
+             timestamp : block.timestamp,
+             blocknumber : block.number
+         ))
+
+         return newSale;
+
+        transferList[tokenId].push(Transfer(_from, _to, _amount, block.timestamp, block.number))
+        Transfer memory newTransfer = new Transfer({
+
+        })
+    } 
+     function getSale(uint tokenId) public view returns(Sales[] memory) {
+        // first load storage array into memory
+        Sales[] memory saleHistory = new Transfer[] (salesList[tokenId].length);
+        for (uint i = 0; i < salesList[tokenId].length; i++) 
+        {
+            saleHistory[i] = salesList[tokenId][i];
+        } 
+          return saleHistory;
+     }
+
+
+    
+
+
+
+
     function render(params) external view returns(string memory);
 
      
@@ -2064,9 +2283,304 @@ Return tokenURI(uint) using current plugin.
 Challenge: Dynamically call abstract methods across contracts using interfaces + access control.
 }
 
+💼 Problem 3: Abstract Decentralized Order Book
+Context: Building an order book where the order execution engine is pluggable.
+
+abstract contract OrderExecutor {
+    function executeOrder(uint orderId) external returns(bool);
+}
+
+
+contract OrderBook {
+    address owner;
+
+    constructor() {
+        msg.sender = owner;
+    }
+
+    modifier onlyOwner() {
+        require(msg.sender == owner , "Not Owner");
+    }
+
+    // this contract must have multiple structs
+    enum OrderStatus {pending, paid, shipped }
+    enum BookAge {New, Refubrished, Old}
+    // one for books
+    
+    struct Books {
+        string name;
+        uint price;
+        uint numberOfPage;
+        address owner;
+        string author;
+        string description;
+        bool isSold;
+        bool isOrdered;
+        OrderStatus bookorderstatus;
+        BookAge bookStatus;
+    }
+
+    // one for orders
+    // we need time when order is done,
+     who ordered, 
+     what is ordered , 
+     how much is ordered,
+     how much per order
+     the order status
+     // payment amount
+     // when a user ordered something then we must perform 
+     // owner transfership to a payer and do the transfering
+    
+    struct Order {
+        address personWhoorder;
+        // what is ordered
+        Books[] books; // reference from mapping of books
+        uint orderAmount;
+        uint pricePerOrder;
+        // order status
+        OrderStatus status;
+        uint paymentAmount;
+        uint timestamp;
+        bool isOrder;
+    }
+    mapping(uint => Books) public books;
+    mapping(address => Books) public books;
+    mapping(uint => Order) public orders;
+    mapping(address => uint) public balances;
+
+    // function to order books
+    uint 
+    // stores and matches orders
+    // chooses orderexecutor depending on order type
+}
+
+contract LimitOrderEngine is OrderExecutor {
+    // this contract is used to limit the order so that
+    // specfic numbers of people can order 
+    // limitation can be done using various methods
+    // based on order number
+    // based on time 
+    // based on orderAmount
+
+}
+
+contract MarketOrderEngine is OrderExecutor {
+    // this contract is used to order the market order
+
+
+    
+}
+
+// must implement function routing, abstract execution, and 
+// modifiers for order validation 
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+Absolutely! Let’s now go deep into Solidity Interfaces — one of the most misunderstood but critical tools in building modular, upgradable, and cross-contract systems in smart contract architecture.
+
+🧠 Interfaces in Solidity – The Full Masterclass
+✅ What Is an Interface?
+An interface in Solidity is a pure abstract contract. It only contains function declarations, and no implementation or state. Interfaces define a contract-to-contract communication blueprint, ensuring consistency across multiple smart contracts.
+
+📌 Syntax Summary
+solidity
+Copy code
+interface IGreeter {
+    function greet() external view returns (string memory);
+}
+🔎 Key Rules of Interfaces
+Rule	Description
+🔹 No implementation	All functions are unimplemented (no body)
+🔹 external only	All functions must be declared external
+🔹 No state variables	Cannot declare storage or mappings
+🔹 No constructors	Cannot have constructors or receive Ether
+🔹 No modifiers	Cannot define custom modifiers
+🔹 Can inherit interfaces	Interfaces can extend other interfaces
+🔹 Can be used for polymorphism	Yes, they enable dynamic contract interaction
+
+🤔 Why Use Interfaces?
+Low-level contract interaction (like interacting with DeFi protocols).
+
+Plugin architecture (pluggable renderers, strategies, logic).
+
+Decouple logic for modularity and testing.
+
+Gas-efficient interaction, as only function signatures are compiled.
+
+Required for cross-contract calls (e.g., ERC20, ERC721).
+
+
+⚙️ HARD CODE EXAMPLE 1: Interface with Real ERC20 Interaction
+
+interface IERC20 {
+    function transfer(address recipient, uint256 amount) external returns (bool);
+    function balanceOf(address account) external view returns(uint256);     
+}
+
+contract TokenVault {
+    IERC20 public immutable token;
+}
+
+
+
+
+
+
+
+// constants and immutables
+uint constant x = 32**32 + 8;
+
+contract C {
+    string constant TEXT = "abc";
+    bytes32 constant MY_HASH = keccak256("abc");
+    uint immutable decimals = 18;
+    uint immutable maxBalance;
+    address immutable owner = msg.sender;
+
+    constructor(uint _decimals, address ref) {
+        if (_decimals != 0) {
+            // Immutables are only immutable when deployed.
+            // At construction time they can be assigned to any number of times.
+            decimals = _decimals;
+
+           // Assignments to immutables can even access the environment
+           maxBalance = ref.balance; 
+        }
+    }
+
+    function isBalanceTooHigh(address other) public view returns(bool) {
+        return other.balance > maxBalance;
+    }
+}
+
+Absolutely — let's go through each forbidden type for constant
+ initializers in Solidity and give concrete examples of what will fail if you try to use them.
+ This will clarify why they’re disallowed.
+
+1. Storage reads
+
+Trying to read a state variable at compile-time is not allowed:
+contract Example {
+    uint256 stateVar = 100;
+    uint256 constant CONST_VAR = stateVar; // Compilation Error
+}
+
+Reason : stateVar lives in contract storage and is only 
+available at runtime. Constants must be known at compile-time.
+
+2. Blockchain data 
+a) block.timestamp
+b) block.number
+c) blockhash(...)
+d) address(this).balance
+
+contract Example {
+    uint256 constant START_TIME = block.timestamp; // Compilation Error
+    uint256 constant BLOCK_NUM = block.number;// Compilation Error
+    bytes32 constant LAST_HASH = blockhash(block.number - 1);// Compilation Error
+    uint256 constant MY_BALANCE = address(this).balance; // Compilatoin Error
+}
+
+Reason: The block timestamp is only known at runtime, when the contract is deployed or called.
+The current block number is only known at runtime.
+The hash of previous blocks is only known at runtime.
+Contract balance changes at runtime; compile-time doesn’t know it.
+
+3. Execution data
+contract Example {
+    uint256 constant MSG_VAL = msg.value; // ❌ Compilation error
+    uint256 constant REM_GAS = gasleft(); // ❌ Compilation error
+}
+
+Reason: msg.value is the amount of Ether sent in a transaction — only available at runtime.
+Remaining gas is only known during execution.
+
+
+4. External contract calls
+
+interface OtherContract {
+    function getValue() external view returns(uint256);
+}
+
+contract Example {
+    OtherContract other = OtherContract(0x123);
+    uint256 constant VAL = other.getValue();
+}
+
+Reason : External calls only happen during at runtime; 
+constants are only compile time only.
+
+3. Allowed compile-time expressions
+
+You can use:
+Literals: numbers, booleans, fixed strings.
+Pure Math on those literals
+some built-in cryptographic and arthimetic functions:
+keccak256
+
+1. Built-in cryptographic & arithmetic functions in Solidity
+
+keccak256(bytes memory)
+
+Returns the Keccak-256 hash (Ethereum’s standard hashing function, same as SHA-3).
+
+Deterministic: given the same input, it always returns the same output.
+bytes32 constant HASH = keccak256("Hello");
+
+
+
+
+sha256(bytes memory)
+
+Returns the SHA-256 hash (Bitcoin’s main hashing algorithm).
+
+bytes32 constant SHA_HASH = sha256("Hello");
+
+Also deterministic and pure.
+
+
+
+
+
+ripemd160(bytes memory)
+
+Returns the RIPEMD-160 hash (used in Bitcoin address generation).
+
+Output is 20 bytes (Solidity pads it to 32 bytes).
+bytes20 constant RIPE_HASH = ripemd160("Hello");
+
+
+
+
+sha256
+
+ripemd160
+
+
+ecrecover(bytes32 hash, uint8 v, bytes32 r, bytes32 s)
+
+Recovers the Ethereum address that signed a given message hash using ECDSA.
+
+Example:
+
+address signer = ecrecover(hash, v, r, s)
+Deterministic if inputs are fixed, but normally used with runtime signatures.
+ecrecover
+
+addmod
+
+mulmod
 
 
 
